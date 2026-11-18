@@ -1,0 +1,34 @@
+@startuml intermediate
+!include <C4/C4_Container>
+LAYOUT_TOP_DOWN()
+title AdScale - промежуточная архитектура на три месяца
+System_Ext(partner, "Новый партнер", "OpenRTB")
+System_Boundary(adscale, "AdScale - один регион, несколько зон") {
+  Container(gateway, "API Gateway", "Envoy", "Доступ, маршруты, квоты")
+  Container(bid, "Bidding", "Go / адаптер C++", "Подбор, аукцион, ответ")
+  ContainerDb(bidDb, "Bidding DB", "PostgreSQL HA", "Результаты и резервы")
+  ContainerDb(cache, "Кампании", "Redis", "Подготовленные версии")
+  Container(monolith, "Сохраненный монолит", "C++ / Go / Python / Node.js", "Campaign, Finance, кабинет и прежние функции")
+  ContainerDb(legacy, "БД монолита", "PostgreSQL HA", "Кампании и финансы")
+  Container(reports, "Отчеты", "Отдельный процесс", "Ограниченные ресурсы")
+  ContainerDb(replica, "Реплика чтения", "PostgreSQL", "Только отчеты")
+  Container(stats, "Statistics", "Go", "Прием событий и outbox")
+  ContainerDb(statsDb, "Журнал событий", "PostgreSQL HA", "Сохранение до HTTP-ответа")
+  ContainerQueue(kafka, "События", "Kafka", "Показы, клики, финансы")
+}
+Rel(partner, gateway, "Ставки и уведомления", "HTTPS")
+Rel(gateway, bid, "Ставки", "OpenRTB")
+Rel(gateway, monolith, "Прежние маршруты", "HTTPS")
+Rel(gateway, stats, "Уведомления", "HTTPS")
+Rel_D(bid, bidDb, "Результат и резервы одной TX", "SQL")
+Rel(bid, cache, "Фоновая загрузка", "RESP")
+Rel(monolith, cache, "Публикация кампаний", "Фон")
+Rel_D(monolith, legacy, "Данные владельца", "SQL")
+Rel(legacy, replica, "Репликация", "WAL")
+Rel(reports, replica, "Чтение", "SQL")
+Rel(monolith, reports, "Запрос отчета", "API")
+Rel(monolith, bid, "Лимиты и сверка", "gRPC")
+Rel_D(stats, statsDb, "Событие и outbox", "SQL")
+Rel(stats, kafka, "Публикация", "Kafka")
+Rel(kafka, monolith, "Финансовый учет", "Consumer")
+@enduml

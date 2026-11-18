@@ -1,0 +1,32 @@
+@startuml components
+title Компоненты Go Bidding
+skinparam componentStyle rectangle
+left to right direction
+actor "Партнер" as partner
+component "Gateway" as gateway
+package "Один процесс Bidding" {
+  component "API\nOpenRTB / gRPC" as api
+  component "Прикладная логика\nподбор и аукцион" as app
+  component "Адаптер C++\nсуществующий алгоритм" as native
+  component "Локальная копия\nкампаний" as snapshot
+  component "Репозиторий\nрезультатов и резервов" as repo
+}
+database "Bidding PostgreSQL" as db
+database "Redis" as redis
+component "Campaign" as campaign
+component "Finance" as finance
+partner --> gateway : HTTPS
+gateway --> api : OpenRTB, дедлайн
+api --> app : внутренняя модель
+app --> snapshot : чтение
+app --> native : чистый расчет
+app --> repo : результат и резерв
+repo --> db : одна транзакция
+snapshot --> redis : прогрев в фоне
+snapshot --> campaign : полный снимок, gRPC
+finance --> api : лимиты и закрытие, gRPC
+note bottom of app
+Внутренние компоненты
+не вызывают друг друга по сети
+end note
+@enduml
