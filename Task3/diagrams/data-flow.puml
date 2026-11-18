@@ -1,0 +1,37 @@
+@startuml data-flow
+title AdScale - владельцы данных и события
+left to right direction
+skinparam componentStyle rectangle
+component "Campaign" as C
+database "Campaign PostgreSQL" as CD
+database "Redis\nкампании" as R
+component "Bidding" as B
+database "Bidding PostgreSQL\nрезультаты / лимиты / резервы" as BD
+component "Statistics" as S
+database "Statistics PostgreSQL\nжурнал / outbox" as SD
+queue "Kafka" as K
+component "Finance" as F
+database "Finance PostgreSQL\nбалансы / проводки" as FD
+component "Analytics" as A
+database "ClickHouse\nсобытия / отчеты" as AD
+cloud "Архив событий" as O
+C --> CD : запись кампаний
+C --> R : фоновое обновление
+C --> K : версии
+B --> R : прогрев, не каждый bid
+B --> BD : результат и резервы
+F --> B : лимиты и закрытие
+F --> FD : финансовая транзакция
+S --> SD : прием до ACK
+S --> K : outbox
+K --> F : финансовые события
+F --> S : подтвержденный учет
+K --> A : показы и клики
+A --> AD : дедупликация до суммы
+S --> O : архивирование
+O --> A : источник пересчета
+note bottom of SD
+Незавершенные финансовые события
+хранятся до учета Finance
+end note
+@enduml

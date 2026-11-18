@@ -1,0 +1,35 @@
+@startuml regions
+title AdScale - основной и резервный регионы через год
+skinparam componentStyle rectangle
+left to right direction
+cloud "Партнеры / маршрутизация" as traffic
+package "Регион A - основной" {
+  component "Gateway и сервисы" as appA
+  database "Критичные PostgreSQL\nBidding / Finance /\nCampaign / Statistics" as pgA
+  queue "Kafka A" as kafkaA
+  database "ClickHouse A" as chA
+}
+package "Регион B - резерв, мощность на 50k RPS" {
+  component "Gateway и сервисы" as appB
+  database "Синхронные реплики PostgreSQL" as pgB
+  queue "Kafka B" as kafkaB
+  database "ClickHouse B" as chB
+}
+cloud "Резервные копии и WAL\nотдельный доступ" as backup
+traffic --> appA : обычный трафик
+traffic ..> appB : после переключения
+appA --> pgA : операции владельцев
+pgA --> pgB : синхронно до ACK
+appA --> kafkaA : события
+appA --> chA : отчеты
+kafkaA ..> kafkaB : асинхронная копия
+chA ..> chB : репликация
+appB --> pgB : после отключения старого primary
+appB --> kafkaB : повтор необработанных событий
+appB --> chB : отчеты
+pgA ..> backup : backup и WAL
+note bottom of pgB
+Переключение сохраняет результаты,
+резервы и ключи финансовых операций
+end note
+@enduml

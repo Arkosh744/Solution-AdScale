@@ -1,0 +1,40 @@
+@startuml rtb-sequence
+title AdScale - ставка и последующий финансовый учет
+hide footbox
+actor "Партнер" as P
+participant "Gateway" as G
+participant "Bidding" as B
+database "Bidding DB" as D
+participant "Statistics" as S
+queue "Kafka" as K
+participant "Finance" as F
+P -> G : новый OpenRTB request, tmax
+G -> B : партнер и общий дедлайн
+B -> B : актуальные кампании и чистый расчет
+B -> D : TX: уникальный request ID,\nрезервы и весь ответ
+alt COMMIT подтвержден и срок не истек
+  D --> B : сохраненный результат
+  B --> G : 200 со ставкой либо 204
+  G --> P : ответ до дедлайна
+else запись или срок не подтверждены
+  B --> G : технический отказ
+  G --> P : 503 / закрытие транспорта
+end
+note over B,D
+Повтор использует сохраненный результат,
+не создает новые резервы
+end note
+... позже, независимо от ответа на ставку ...
+P -> G : финансовое уведомление с reservation ID
+G -> S : проверенный партнер
+S -> S : TX в своей PostgreSQL:\nсобытие и outbox
+S --> G : 202 после COMMIT
+G --> P : принято
+S -> K : публикация с прежним event ID
+K -> F : финансовое событие
+F -> B : идемпотентное закрытие резерва
+B -> D : TX: списан либо освобожден
+B --> F : прежний или новый результат закрытия
+F -> F : TX: учет и ключ окончательной операции
+F --> S : подтвержденный учет
+@enduml
